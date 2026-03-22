@@ -101,6 +101,21 @@
         hr {
             margin: 20px 0;
         }
+        .api-link {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .api-link a {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .api-link a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -108,6 +123,14 @@
         <h1>WARP Config Builder</h1>
         <p>Вставьте JSON, полученный от <code>https://santa-atmo.ru/warp/warp.php</code>, и нажмите «Собрать конфиг».</p>
         
+        <!-- Ссылка на API в новой вкладке -->
+        <div class="api-link">
+            📡 Получить свежий JSON: 
+            <a href="https://santa-atmo.ru/warp/warp.php" target="_blank" rel="noopener noreferrer">
+                https://santa-atmo.ru/warp/warp.php
+            </a> (откроется в новой вкладке)
+        </div>
+
         <div class="form-group">
             <label for="jsonInput">JSON ответ:</label>
             <textarea id="jsonInput" placeholder='Вставьте JSON сюда...'></textarea>
