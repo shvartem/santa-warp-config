@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WARP Config Builder</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        textarea {
+            width: 100%;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        #jsonInput {
+            height: 300px;
+        }
+        #output {
+            height: 400px;
+            background-color: #f8f9fa;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .copy-btn {
+            background-color: #28a745;
+        }
+        .copy-btn:hover {
+            background-color: #218838;
+        }
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #f8d7da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .success {
+            color: #28a745;
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #d4edda;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .info {
+            color: #0c5460;
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #d1ecf1;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .button-group {
+            margin: 15px 0;
+        }
+        hr {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WARP Config Builder</h1>
+        <p>Вставьте JSON, полученный от <code>https://santa-atmo.ru/warp/warp.php</code>, и нажмите «Собрать конфиг».</p>
+        
+        <div class="form-group">
+            <label for="jsonInput">JSON ответ:</label>
+            <textarea id="jsonInput" placeholder='Вставьте JSON сюда...'></textarea>
+        </div>
+
+        <div class="button-group">
+            <button id="buildBtn">Собрать конфиг</button>
+            <button id="clearBtn">Очистить всё</button>
+        </div>
+
+        <div id="message"></div>
+
+        <hr>
+
+        <div class="form-group" id="outputGroup" style="display: none;">
+            <label for="output">Конфигурация WireGuard:</label>
+            <textarea id="output" readonly></textarea>
+            <div class="button-group">
+                <button id="copyBtn" class="copy-btn">Копировать в буфер</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Функция-конструктор конфигурации (аналог bash confWarpBuilder)
+        function buildWarpConfig(jsonString) {
+            let data;
+            try {
+                data = JSON.parse(jsonString);
+            } catch (e) {
+                throw new Error('Невалидный JSON: ' + e.message);
+            }
+
+            // Проверяем наличие необходимых полей
+            const peerPub = data?.result?.config?.peers?.[0]?.public_key;
+            const clientIpv4 = data?.result?.config?.interface?.addresses?.v4;
+            const clientIpv6 = data?.result?.config?.interface?.addresses?.v6;
+            const priv = data?.result?.key;
+
+            if (!peerPub) throw new Error('Отсутствует поле: result.config.peers[0].public_key');
+            if (!clientIpv4) throw new Error('Отсутствует поле: result.config.interface.addresses.v4');
+            if (!clientIpv6) throw new Error('Отсутствует поле: result.config.interface.addresses.v6');
+            if (!priv) throw new Error('Отсутствует поле: result.key');
+
+            // Формируем конфигурацию (полностью скопировано из bash)
+            const conf = `[Interface]
+PrivateKey = ${priv}
+S1 = 0
+S2 = 0
+Jc = 120
+Jmin = 23
+Jmax = 911
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+MTU = 1280
+I1 = <b 0xc2000000011419fa4bb3599f336777de79f81ca9a8d80d91eeec000044c635cef024a885dcb66d1420a91a8c427e87d6cf8e08b563932f449412cddf77d3e2594ea1c7a183c238a89e9adb7ffa57c133e55c59bec101634db90afb83f75b19fe703179e26a31902324c73f82d9354e1ed8da39af610afcb27e6$
+Address = ${clientIpv4}, ${clientIpv6}
+DNS = 1.1.1.1, 2606:4700:4700::1111, 1.0.0.1, 2606:4700:4700::1001
+
+[Peer]
+PublicKey = ${peerPub}
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = 162.159.192.1:500`;
+
+            return conf;
+        }
+
+        // DOM элементы
+        const jsonInput = document.getElementById('jsonInput');
+        const buildBtn = document.getElementById('buildBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const outputGroup = document.getElementById('outputGroup');
+        const outputTextarea = document.getElementById('output');
+        const copyBtn = document.getElementById('copyBtn');
+        const messageDiv = document.getElementById('message');
+
+        // Пример JSON для демонстрации (можно заполнить по умолчанию)
+        const exampleJson = `{
+  "result": {
+    "id": "a92e3b79-3b35-4f4f-9990-9184e0750da3",
+    "type": "i",
+    "key": "UMjkcXKVDZYiE7mEzORN/dS9esKMXk5UqZinxH0ZP0s=",
+    "config": {
+      "peers": [
+        {
+          "public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
+          "endpoint": {
+            "v4": "162.159.192.4:0",
+            "v6": "[2606:4700:d0::a29f:c004]:0"
+          }
+        }
+      ],
+      "interface": {
+        "addresses": {
+          "v4": "172.16.0.2",
+          "v6": "2606:4700:110:8179:9e7e:44e2:8004:4787"
+        }
+      }
+    }
+  },
+  "success": true
+}`;
+
+        // Заполняем текстовое поле примером, чтобы пользователь мог сразу протестировать
+        jsonInput.value = exampleJson;
+
+        // Обработка кнопки "Собрать конфиг"
+        buildBtn.addEventListener('click', () => {
+            const jsonText = jsonInput.value.trim();
+            if (!jsonText) {
+                showMessage('Введите JSON-ответ от сервера', 'error');
+                return;
+            }
+
+            try {
+                const config = buildWarpConfig(jsonText);
+                outputTextarea.value = config;
+                outputGroup.style.display = 'block';
+                showMessage('Конфигурация успешно создана', 'success');
+            } catch (err) {
+                showMessage(err.message, 'error');
+                outputGroup.style.display = 'none';
+            }
+        });
+
+        // Очистка всех полей
+        clearBtn.addEventListener('click', () => {
+            jsonInput.value = '';
+            outputTextarea.value = '';
+            outputGroup.style.display = 'none';
+            clearMessage();
+        });
+
+        // Копирование в буфер
+        copyBtn.addEventListener('click', async () => {
+            if (!outputTextarea.value) return;
+            try {
+                await navigator.clipboard.writeText(outputTextarea.value);
+                showMessage('Конфигурация скопирована в буфер обмена!', 'success');
+            } catch (err) {
+                // fallback для старых браузеров
+                outputTextarea.select();
+                document.execCommand('copy');
+                showMessage('Конфигурация скопирована (старый метод)', 'success');
+            }
+        });
+
+        // Функции для вывода сообщений
+        function showMessage(text, type) {
+            messageDiv.innerHTML = `<div class="${type}">${text}</div>`;
+            setTimeout(() => {
+                if (messageDiv.innerHTML.includes(text)) {
+                    messageDiv.innerHTML = '';
+                }
+            }, 5000);
+        }
+        function clearMessage() {
+            messageDiv.innerHTML = '';
+        }
+    </script>
+</body>
+</html>
