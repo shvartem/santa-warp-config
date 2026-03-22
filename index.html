@@ -71,6 +71,12 @@
         .copy-btn:hover {
             background-color: #218838;
         }
+        .save-btn {
+            background-color: #fd7e14;
+        }
+        .save-btn:hover {
+            background-color: #e66a0a;
+        }
         .error {
             color: #dc3545;
             margin-top: 10px;
@@ -123,7 +129,6 @@
         <h1>WARP Config Builder</h1>
         <p>Вставьте JSON, полученный от <code>https://santa-atmo.ru/warp/warp.php</code>, и нажмите «Собрать конфиг».</p>
         
-        <!-- Ссылка на API в новой вкладке -->
         <div class="api-link">
             📡 Получить свежий JSON: 
             <a href="https://santa-atmo.ru/warp/warp.php" target="_blank" rel="noopener noreferrer">
@@ -150,6 +155,7 @@
             <textarea id="output" readonly></textarea>
             <div class="button-group">
                 <button id="copyBtn" class="copy-btn">Копировать в буфер</button>
+                <button id="saveBtn" class="save-btn">Сохранить в файл (warp_config.conf)</button>
             </div>
         </div>
     </div>
@@ -207,6 +213,7 @@ Endpoint = 162.159.192.1:500`;
         const outputGroup = document.getElementById('outputGroup');
         const outputTextarea = document.getElementById('output');
         const copyBtn = document.getElementById('copyBtn');
+        const saveBtn = document.getElementById('saveBtn');
         const messageDiv = document.getElementById('message');
 
         // Пример JSON для демонстрации (можно заполнить по умолчанию)
@@ -278,6 +285,25 @@ Endpoint = 162.159.192.1:500`;
                 document.execCommand('copy');
                 showMessage('Конфигурация скопирована (старый метод)', 'success');
             }
+        });
+
+        // Сохранение в файл
+        saveBtn.addEventListener('click', () => {
+            if (!outputTextarea.value) {
+                showMessage('Нет конфигурации для сохранения', 'error');
+                return;
+            }
+            const content = outputTextarea.value;
+            const blob = new Blob([content], { type: 'text/plain' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.download = 'warp_config.conf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showMessage('Файл warp_config.conf сохранён', 'success');
         });
 
         // Функции для вывода сообщений
