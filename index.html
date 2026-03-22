@@ -287,14 +287,14 @@ Endpoint = 162.159.192.1:500`;
             }
         });
 
-        // Сохранение в файл
+        // Сохранение в файл (без добавления .txt)
         saveBtn.addEventListener('click', () => {
             if (!outputTextarea.value) {
                 showMessage('Нет конфигурации для сохранения', 'error');
                 return;
             }
             const content = outputTextarea.value;
-            const blob = new Blob([content], { type: 'text/plain' });
+            const blob = new Blob([content], { type: 'application/octet-stream' });
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
             link.href = url;
