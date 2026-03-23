@@ -216,36 +216,6 @@ Endpoint = 162.159.192.1:500`;
         const saveBtn = document.getElementById('saveBtn');
         const messageDiv = document.getElementById('message');
 
-        // Пример JSON для демонстрации (можно заполнить по умолчанию)
-        const exampleJson = `{
-  "result": {
-    "id": "a92e3b79-3b35-4f4f-9990-9184e0750da3",
-    "type": "i",
-    "key": "UMjkcXKVDZYiE7mEzORN/dS9esKMXk5UqZinxH0ZP0s=",
-    "config": {
-      "peers": [
-        {
-          "public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
-          "endpoint": {
-            "v4": "162.159.192.4:0",
-            "v6": "[2606:4700:d0::a29f:c004]:0"
-          }
-        }
-      ],
-      "interface": {
-        "addresses": {
-          "v4": "172.16.0.2",
-          "v6": "2606:4700:110:8179:9e7e:44e2:8004:4787"
-        }
-      }
-    }
-  },
-  "success": true
-}`;
-
-        // Заполняем текстовое поле примером, чтобы пользователь мог сразу протестировать
-        jsonInput.value = exampleJson;
-
         // Обработка кнопки "Собрать конфиг"
         buildBtn.addEventListener('click', () => {
             const jsonText = jsonInput.value.trim();
