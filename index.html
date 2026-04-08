@@ -239,7 +239,8 @@ DNS = 1.1.1.1, 2606:4700:4700::1111, 1.0.0.1, 2606:4700:4700::1001
 [Peer]
 PublicKey = ${peerPub}
 AllowedIPs = 0.0.0.0/0, ::/0
-Endpoint = 162.159.192.1:500`;
+Endpoint = 162.159.192.1:500
+PersistentKeepalive = 25`;
 
             return conf;
         }
