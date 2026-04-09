@@ -234,7 +234,7 @@
             <textarea id="output" readonly></textarea>
             <div class="button-group">
                 <button id="copyBtn" class="copy-btn">Копировать в буфер</button>
-                <button id="saveBtn" class="save-btn">Сохранить в файл (warp_config.conf)</button>
+                <button id="saveBtn" class="save-btn">Сохранить в файл</button>
             </div>
         </div>
     </div>
@@ -366,17 +366,25 @@ PersistentKeepalive = 25`;
                 showMessage('Нет конфигурации для сохранения', 'error');
                 return;
             }
+
+            // Получаем выбранный DNS провайдер
+            const dnsProvider = getSelectedDnsProvider();
+            
             const content = outputTextarea.value;
             const blob = new Blob([content], { type: 'application/octet-stream' });
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
             link.href = url;
-            link.download = 'warp_config.conf';
+            
+            // Генерируем имя файла в зависимости от выбранного DNS
+            link.download = `warp_santa_${dnsProvider}.conf`;
+            
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            showMessage('Файл warp_config.conf сохранён', 'success');
+            
+            showMessage(`Файл warp_santa_${dnsProvider}.conf сохранён`, 'success');
         });
 
         // Функции для вывода сообщений
