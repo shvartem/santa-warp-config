@@ -1,0 +1,25 @@
+name = "warp-config-reg"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Сайты, которым разрешено обращаться к Worker (через запятую).
+# Для локальной проверки страницы можно добавить, например, http://localhost:8000
+ALLOWED_ORIGINS = "https://shvartem.github.io"
+
+# Не больше 5 регистраций в минуту с одного IP-адреса
+[[ratelimits]]
+name = "RATE_LIMITER_IP"
+namespace_id = "41001"
+  [ratelimits.simple]
+  limit = 5
+  period = 60
+
+# И не больше 30 в минуту на весь Worker: все запросы к Cloudflare идут
+# с его адресов, и при большом потоке Cloudflare может начать отвечать 429
+[[ratelimits]]
+name = "RATE_LIMITER_GLOBAL"
+namespace_id = "41002"
+  [ratelimits.simple]
+  limit = 30
+  period = 60

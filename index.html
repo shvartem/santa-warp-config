@@ -308,6 +308,24 @@
         .api-link a:hover {
             text-decoration: underline;
         }
+        .auto-block {
+            margin: 10px 0;
+            padding: 15px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            text-align: center;
+        }
+        .auto-block button {
+            margin: 0;
+            font-size: 16px;
+        }
+        .auto-block .field-hint {
+            margin-top: 8px;
+        }
+        .auto-block button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
         /* Стили для радиокнопок */
         .radio-group {
             display: flex;
@@ -441,10 +459,17 @@
     <div class="container">
         <button type="button" id="themeToggle" class="theme-toggle" title="Тема оформления">🌓 Тема: авто</button>
         <h1>WARP Config Builder</h1>
-        <p>Вставьте JSON, полученный от <code>https://santa-atmo.ru/warp/warp.php</code>, и нажмите «Собрать конфиг».</p>
+        <p id="introText">Вставьте JSON, полученный от <code>https://santa-atmo.ru/warp/warp.php</code>, и нажмите «Собрать конфиг».</p>
         
+        <div class="auto-block" id="autoBlock" hidden>
+            <button type="button" id="autoBtn">⚡ Получить конфиг автоматически</button>
+            <div class="field-hint">
+                Ключи создаются прямо в вашем браузере — на сервер уходит только публичный ключ.
+            </div>
+        </div>
+
         <div class="api-link">
-            📡 Получить свежий JSON: 
+            <span id="manualLead">📡 Получить свежий JSON:</span>
             <a href="https://santa-atmo.ru/warp/warp.php" target="_blank" rel="noopener noreferrer">
                 https://santa-atmo.ru/warp/warp.php
             </a> (откроется в новой вкладке)
@@ -1090,6 +1115,112 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        });
+
+        // ---------- Автоматическое получение конфига через свой Worker ----------
+        // Адрес развёрнутого Worker (папка worker/). Пустая строка — кнопка скрыта,
+        // остаётся ручной способ через santa.
+        const REGISTER_API_URL = '';
+
+        const autoBlock = document.getElementById('autoBlock');
+        const autoBtn = document.getElementById('autoBtn');
+        const manualLead = document.getElementById('manualLead');
+
+        function bytesToBase64(bytes) {
+            return btoa(String.fromCharCode(...bytes));
+        }
+
+        // X25519 по RFC 7748 на BigInt — для браузеров без X25519 в WebCrypto
+        function x25519(scalar, u) {
+            const P = 2n ** 255n - 19n;
+            const mod = (a) => ((a % P) + P) % P;
+            const pow = (b, e) => {
+                let r = 1n;
+                b = mod(b);
+                while (e > 0n) {
+                    if (e & 1n) r = mod(r * b);
+                    b = mod(b * b);
+                    e >>= 1n;
+                }
+                return r;
+            };
+            let k = 0n;
+            for (let i = 31; i >= 0; i--) k = (k << 8n) | BigInt(scalar[i]);
+            let x2 = 1n, z2 = 0n, x3 = u, z3 = 1n, swap = 0n;
+            for (let t = 254n; t >= 0n; t--) {
+                const bit = (k >> t) & 1n;
+                swap ^= bit;
+                if (swap) [x2, x3, z2, z3] = [x3, x2, z3, z2];
+                swap = bit;
+                const a = x2 + z2, b = x2 - z2, c = x3 + z3, d = x3 - z3;
+                const aa = mod(a * a), bb = mod(b * b), da = mod(d * a), cb = mod(c * b);
+                const e = mod(aa - bb);
+                x3 = mod((da + cb) ** 2n);
+                z3 = mod(u * mod((da - cb) ** 2n));
+                x2 = mod(aa * bb);
+                z2 = mod(e * (aa + 121665n * e));
+            }
+            if (swap) [x2, z2] = [x3, z3];
+            let r = mod(x2 * pow(z2, P - 2n));
+            const out = new Uint8Array(32);
+            for (let i = 0; i < 32; i++) { out[i] = Number(r & 255n); r >>= 8n; }
+            return out;
+        }
+
+        // Пара ключей WireGuard: { priv, pub } в base64
+        async function generateKeyPair() {
+            try {
+                const pair = await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+                const pub = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
+                const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
+                return { priv: bytesToBase64(pkcs8.slice(-32)), pub: bytesToBase64(pub) };
+            } catch (e) {
+                // WebCrypto без X25519 (старые браузеры) — считаем сами
+                const k = crypto.getRandomValues(new Uint8Array(32));
+                k[0] &= 248; k[31] &= 127; k[31] |= 64;
+                return { priv: bytesToBase64(k), pub: bytesToBase64(x25519(k, 9n)) };
+            }
+        }
+
+        async function fetchConfigAutomatically() {
+            const { priv, pub } = await generateKeyPair();
+            let res;
+            try {
+                res = await fetch(REGISTER_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: pub })
+                });
+            } catch (e) {
+                throw new Error('Сервер регистрации недоступен');
+            }
+            let data = null;
+            try { data = await res.json(); } catch (e) { /* разберёмся ниже */ }
+            if (!res.ok) throw new Error(data?.error || `Сервер регистрации вернул код ${res.status}`);
+            if (!data?.config?.peers?.[0]?.public_key) throw new Error('Сервер регистрации прислал неожиданный ответ');
+            // Тот же формат, что у santa, — дальше конфиг собирается как обычно
+            return { result: { key: priv, config: data.config } };
+        }
+
+        if (REGISTER_API_URL) {
+            autoBlock.hidden = false;
+            manualLead.textContent = '📡 Или получите JSON вручную:';
+            document.getElementById('introText').textContent =
+                'Нажмите «Получить конфиг автоматически» — или вставьте JSON от santa-atmo.ru и нажмите «Собрать конфиг».';
+        }
+
+        autoBtn.addEventListener('click', async () => {
+            autoBtn.disabled = true;
+            autoBtn.textContent = '⏳ Регистрирую…';
+            try {
+                const json = await fetchConfigAutomatically();
+                setJsonAndBuild(JSON.stringify(json, null, 2));
+            } catch (err) {
+                showMessage(`${err.message.replace(/\.$/, '')}. Получите JSON вручную по ссылке santa-atmo.ru ниже.`, 'error');
+            } finally {
+                autoBtn.disabled = false;
+                autoBtn.textContent = '⚡ Получить конфиг автоматически';
+            }
         });
 
         // ---------- Ввод JSON: буфер обмена, файл, перетаскивание ----------
