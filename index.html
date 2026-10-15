@@ -310,6 +310,21 @@
 
         <!-- Новый блок выбора DNS -->
         <div class="form-group">
+            <label>Формат конфига:</label>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="configFormat" value="awg" checked> AmneziaWG (рекомендуется)
+                </label>
+                <label>
+                    <input type="radio" name="configFormat" value="wg"> Обычный WireGuard
+                </label>
+            </div>
+            <div class="field-hint" id="formatHint">
+                Конфиг с маскировкой трафика для клиентов AmneziaVPN / AmneziaWG — работает там, где WARP блокируют.
+            </div>
+        </div>
+
+        <div class="form-group">
             <label>Выберите DNS-сервис:</label>
             <div class="radio-group">
                 <label>
@@ -652,6 +667,31 @@
             return `${host}:${port}`;
         }
 
+        // Формат конфига
+        const formatRadios = document.querySelectorAll('input[name="configFormat"]');
+        const formatHint = document.getElementById('formatHint');
+        const FORMAT_HINTS = {
+            awg: 'Конфиг с маскировкой трафика для клиентов AmneziaVPN / AmneziaWG — работает там, где WARP блокируют.',
+            wg: 'Конфиг без параметров маскировки — для официального приложения WireGuard, роутеров и т.п. ' +
+                'Работает только там, где WARP не блокируется.'
+        };
+        function getSelectedFormat() {
+            for (const radio of formatRadios) {
+                if (radio.checked) return radio.value;
+            }
+            return 'awg';
+        }
+
+        // Параметры маскировки AmneziaWG (включая параметры версий 1.5 и 2.0 на будущее),
+        // которых нет в обычном WireGuard и которые он отказывается разбирать
+        const AWG_ONLY_KEYS = /^\s*(Jc|Jmin|Jmax|S[1-4]|H[1-4]|I[1-5]|J[1-3]|Itime)\s*=/;
+        function toPlainWireGuard(conf) {
+            return conf
+                .split('\n')
+                .filter(line => !AWG_ONLY_KEYS.test(line))
+                .join('\n');
+        }
+
         // Получить выбранный DNS провайдер
         function getSelectedDnsProvider() {
             for (const radio of radioButtons) {
@@ -660,8 +700,13 @@
             return 'cloudflare'; // fallback
         }
 
-        // DNS, с которым был собран текущий конфиг (используется для имени файла)
-        let builtDnsProvider = null;
+        // Имя файла (без расширения) для текущего собранного конфига:
+        // зависит от DNS и формата, с которыми он реально собран
+        let builtFileBase = null;
+
+        function describeBuild(format, dnsProvider) {
+            return `${format === 'wg' ? 'WireGuard' : 'AmneziaWG'}, DNS: ${dnsProvider}`;
+        }
 
         // Сборка конфига; quiet = true — не показывать ошибку, если поле JSON пустое
         async function rebuild({ quiet = false } = {}) {
@@ -675,9 +720,11 @@
 
             try {
                 const template = await loadTemplate();
-                const config = buildWarpConfig(template, jsonText, getSettings(dnsProvider));
+                const format = getSelectedFormat();
+                let config = buildWarpConfig(template, jsonText, getSettings(dnsProvider));
+                if (format === 'wg') config = toPlainWireGuard(config);
                 outputTextarea.value = config;
-                builtDnsProvider = dnsProvider;
+                builtFileBase = `warp_santa_${dnsProvider}${format === 'wg' ? '_wg' : ''}`;
                 outputGroup.style.display = 'block';
                 if (!qrBox.hidden) {
                     // Ошибка QR не должна мешать самому конфигу
@@ -685,14 +732,14 @@
                         renderQr();
                     } catch (qrErr) {
                         hideQr();
-                        showMessage(`Конфигурация создана (DNS: ${dnsProvider}), но ${qrErr.message}`, 'info');
+                        showMessage(`Конфигурация создана (${describeBuild(format, dnsProvider)}), но ${qrErr.message}`, 'info');
                         return;
                     }
                 }
-                showMessage(`Конфигурация успешно создана (DNS: ${dnsProvider})`, 'success');
+                showMessage(`Конфигурация успешно создана (${describeBuild(format, dnsProvider)})`, 'success');
             } catch (err) {
                 outputTextarea.value = '';
-                builtDnsProvider = null;
+                builtFileBase = null;
                 outputGroup.style.display = 'none';
                 hideQr();
                 showMessage(err.message, 'error');
@@ -751,14 +798,24 @@
             });
         }
 
+        for (const radio of formatRadios) {
+            radio.addEventListener('change', () => {
+                formatHint.textContent = FORMAT_HINTS[getSelectedFormat()];
+                if (outputTextarea.value) rebuild({ quiet: true });
+            });
+        }
+
         // Очистка всех полей
         clearBtn.addEventListener('click', () => {
             jsonInput.value = '';
             outputTextarea.value = '';
-            builtDnsProvider = null;
+            builtFileBase = null;
             outputGroup.style.display = 'none';
             hideQr();
             clearMessage();
+            // Сбросить формат на AmneziaWG
+            document.querySelector('input[name="configFormat"][value="awg"]').checked = true;
+            formatHint.textContent = FORMAT_HINTS.awg;
             // Сбросить радиокнопку на Cloudflare (по умолчанию)
             document.querySelector('input[value="cloudflare"]').checked = true;
             // и endpoint — на значения по умолчанию
@@ -791,13 +848,13 @@
 
         // Сохранение в файл
         saveBtn.addEventListener('click', () => {
-            if (!outputTextarea.value || !builtDnsProvider) {
+            if (!outputTextarea.value || !builtFileBase) {
                 showMessage('Нет конфигурации для сохранения', 'error');
                 return;
             }
 
             // Имя файла — по DNS, с которым конфиг реально собран
-            const filename = `warp_santa_${builtDnsProvider}.conf`;
+            const filename = `${builtFileBase}.conf`;
 
             const blob = new Blob([outputTextarea.value], { type: 'application/octet-stream' });
             const link = document.createElement('a');
@@ -877,10 +934,10 @@
         });
 
         qrSaveBtn.addEventListener('click', () => {
-            if (qrBox.hidden || !builtDnsProvider) return;
+            if (qrBox.hidden || !builtFileBase) return;
             const link = document.createElement('a');
             link.href = qrCanvas.toDataURL('image/png');
-            link.download = `warp_santa_${builtDnsProvider}_qr.png`;
+            link.download = `${builtFileBase}_qr.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
