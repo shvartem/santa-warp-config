@@ -1,19 +1,32 @@
 #!/bin/bash
 #
-# Получает конфиг Cloudflare WARP через API santa-atmo.ru и сохраняет его в файл.
+# Регистрирует аккаунт Cloudflare WARP и сохраняет готовый конфиг в файл.
+# По умолчанию регистрируется напрямую у Cloudflare: пара ключей создаётся на этом
+# компьютере, и приватный ключ никуда не отправляется. Если не получилось —
+# берёт конфиг у santa-atmo.ru.
 # Запустите с --help, чтобы увидеть все параметры.
 # Работает и со старым bash 3.2 (macOS).
 
 WARP_API_URL="${WARP_API_URL:-https://santa-atmo.ru/warp/warp.php}"
+
+# API регистрации, которым пользуется приложение 1.1.1.1. Версия и заголовки — как в wgcf
+# (https://github.com/ViRb3/wgcf, cloudflare/api.go); если Cloudflare начнёт отказывать,
+# сверьтесь со свежей версией wgcf.
+CF_API_URL="${CF_API_URL:-https://api.cloudflareclient.com/v0a5641/reg}"
+CF_USER_AGENT="1.1.1.1/6.38.9-5641 (Android 16.0.0)"
+CF_CLIENT_VERSION="a-6.38.9-5641"
 
 usage()
 {
     cat <<'USAGE'
 Использование: generate_warp_santa.sh [параметры]
 
-Без параметров запрашивает конфиг у API и спрашивает имя файла.
+Без параметров регистрирует новый аккаунт WARP и спрашивает имя файла.
 
 Параметры:
+  -s, --source SOURCE     auto (по умолчанию) — напрямую у Cloudflare, а если не вышло — santa;
+                          cloudflare — только напрямую (ключ создаётся на этом компьютере);
+                          santa — только через santa-atmo.ru (ключ создаёт их сервер)
   -f, --format FORMAT     awg (по умолчанию) — AmneziaWG с маскировкой трафика;
                           wg — обычный WireGuard (работает, только где WARP не блокируют)
   -d, --dns DNS           cloudflare (по умолчанию), google, comss, malw
@@ -28,8 +41,8 @@ usage()
       --keepalive N       PersistentKeepalive в секундах, 0–65535 (по умолчанию 25; 0 — выкл.)
   -o, --out FILE          куда сохранить; «-» — вывести в консоль.
                           По умолчанию warp_santa_<dns>.conf (для wg — warp_santa_<dns>_wg.conf)
-  -j, --json FILE         взять готовый JSON-ответ API из файла («-» — из stdin)
-                          вместо запроса к API
+  -j, --json FILE         взять готовый JSON-ответ santa из файла («-» — из stdin)
+                          вместо регистрации
       --force             перезаписать существующий файл без вопроса
   -h, --help              показать эту справку
 
@@ -190,13 +203,121 @@ parseEndpoint()
     echo "$host:$((10#$port))"
 }
 
-# Запрос к API; печатает тело ответа и последней строкой HTTP-код
-requestConfWARP()
+# ---------- Получение конфига ----------
+# Обе функции при успехе кладут в response_body JSON в формате santa:
+#   {"result": {"key": <приватный ключ>, "config": {"peers": [...], "interface": {...}}}}
+# а при ошибке пишут причину в stderr и возвращают 1.
+
+# santa-atmo.ru: сервер сам регистрирует аккаунт и присылает в том числе приватный ключ
+fetchFromSanta()
 {
-    curl -sS --connect-timeout 20 --max-time 60 -w "\n%{http_code}" "$WARP_API_URL" \
+    command -v curl > /dev/null 2>&1 || { info "Не найден curl"; return 1; }
+    info "Запрашиваю конфиг у $WARP_API_URL..."
+    local result http_code
+    result=$(curl -sS --connect-timeout 20 --max-time 60 -w "\n%{http_code}" "$WARP_API_URL" \
         -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' \
         -H "referer: $WARP_API_URL" \
-        -H "Origin: $WARP_API_URL"
+        -H "Origin: $WARP_API_URL") || { info "Не удалось связаться с $WARP_API_URL"; return 1; }
+    http_code=${result##*$'\n'}
+    response_body=${result%$'\n'*}
+    if [[ "$http_code" != "200" ]]; then
+        info "Ответ: ${response_body:0:200}"
+        info "Сервер $WARP_API_URL вернул код $http_code"
+        return 1
+    fi
+    return 0
+}
+
+# Пара ключей X25519 (как у WireGuard) в base64. Печатает «приватный публичный».
+# Пробует по очереди wg, openssl и python3 — что найдётся на компьютере.
+generateKeys()
+{
+    local priv pub der
+    if command -v wg > /dev/null 2>&1; then
+        priv=$(wg genkey) && pub=$(printf '%s' "$priv" | wg pubkey)
+    elif command -v openssl > /dev/null 2>&1 \
+        && der=$(openssl genpkey -algorithm X25519 -outform DER 2> /dev/null | openssl base64 -A) \
+        && [[ -n "$der" ]]; then
+        # DER-обёртка ключа X25519 фиксированной длины: сам ключ — последние 32 байта
+        priv=$(printf '%s' "$der" | openssl base64 -d -A | tail -c 32 | openssl base64 -A)
+        pub=$(printf '%s' "$der" | openssl base64 -d -A \
+            | openssl pkey -inform DER -pubout -outform DER 2> /dev/null | tail -c 32 | openssl base64 -A)
+    elif command -v python3 > /dev/null 2>&1; then
+        # X25519 по RFC 7748 на чистом Python — без сторонних библиотек
+        read -r priv pub < <(python3 -I -c '
+import os, base64
+P = 2**255 - 19
+def x25519(k, u):
+    k = int.from_bytes(k, "little")
+    x1, x2, z2, x3, z3, swap = u, 1, 0, u, 1, 0
+    for t in reversed(range(255)):
+        bit = (k >> t) & 1
+        swap ^= bit
+        if swap:
+            x2, x3, z2, z3 = x3, x2, z3, z2
+        swap = bit
+        a, b, c, d = x2 + z2, x2 - z2, x3 + z3, x3 - z3
+        aa, bb, da, cb = a * a, b * b, d * a, c * b
+        e = aa - bb
+        x3, z3 = (da + cb) ** 2 % P, u * (da - cb) ** 2 % P
+        x2, z2 = aa * bb % P, e * (aa + 121665 * e) % P
+    if swap:
+        x2, z2 = x3, z3
+    return (x2 * pow(z2, P - 2, P) % P).to_bytes(32, "little")
+k = bytearray(os.urandom(32))
+k[0] &= 248; k[31] &= 127; k[31] |= 64
+k = bytes(k)
+print(base64.b64encode(k).decode(), base64.b64encode(x25519(k, 9)).decode())
+')
+    fi
+    # Ключ WireGuard в base64 — ровно 44 символа
+    if [[ ${#priv} -ne 44 || ${#pub} -ne 44 ]]; then
+        info "Не удалось создать ключи: нужен wg, openssl 1.1+ или python3"
+        return 1
+    fi
+    echo "$priv $pub"
+}
+
+# Регистрация напрямую у Cloudflare: отправляется только публичный ключ
+fetchFromCloudflare()
+{
+    command -v curl > /dev/null 2>&1 || { info "Не найден curl"; return 1; }
+    local keys priv pub tos body result http_code
+    keys=$(generateKeys) || return 1
+    priv=${keys% *}
+    pub=${keys#* }
+
+    tos=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+    body=$(jq -cn --arg key "$pub" --arg tos "$tos" '{
+        key: $key, install_id: "", fcm_token: "", tos: $tos, model: "PC",
+        serial_number: "", locale: "en_US", os_version: "16.0.0",
+        key_type: "curve25519", tunnel_type: "wireguard"
+    }')
+
+    info "Регистрирую аккаунт WARP напрямую у Cloudflare..."
+    # TLS 1.2 — как у приложения 1.1.1.1
+    result=$(curl -sS --tlsv1.2 --tls-max 1.2 --connect-timeout 20 --max-time 60 \
+        -w "\n%{http_code}" -X POST "$CF_API_URL" \
+        -H "User-Agent: $CF_USER_AGENT" \
+        -H "CF-Client-Version: $CF_CLIENT_VERSION" \
+        -H "Content-Type: application/json; charset=UTF-8" \
+        -d "$body") || { info "Не удалось связаться с Cloudflare"; return 1; }
+    http_code=${result##*$'\n'}
+    result=${result%$'\n'*}
+    if [[ "$http_code" != "200" ]]; then
+        info "Cloudflare вернул код $http_code: ${result:0:200}"
+        return 1
+    fi
+
+    # Приводим ответ к формату santa и добавляем наш приватный ключ
+    if ! response_body=$(echo "$result" | jq -ce --arg key "$priv" '
+            select(.config.peers[0].public_key and .config.interface.addresses.v4
+                   and .config.interface.addresses.v6)
+            | {result: (. + {key: $key})}' 2> /dev/null); then
+        info "Неожиданный ответ Cloudflare: ${result:0:200}"
+        return 1
+    fi
+    return 0
 }
 
 
@@ -261,6 +382,7 @@ opt_mtu="1280"
 opt_keepalive="25"
 out_arg=""
 json_arg=""
+opt_source="auto"
 force=0
 
 needArg()
@@ -271,6 +393,7 @@ needArg()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)        usage; exit 0 ;;
+        -s|--source)      needArg "$1" "$2"; opt_source=$2; shift 2 ;;
         -f|--format)      needArg "$1" "$2"; opt_format=$2; shift 2 ;;
         -d|--dns)         needArg "$1" "$2"; opt_dns_arg=$2; shift 2 ;;
         -e|--endpoint)    needArg "$1" "$2"; endpoint_arg=$2; shift 2 ;;
@@ -290,6 +413,11 @@ case "$opt_format" in
     awg|wg) ;;
     *) die "формат должен быть awg или wg: $opt_format" ;;
 esac
+case "$opt_source" in
+    auto|cloudflare|santa) ;;
+    *) die "источник должен быть auto, cloudflare или santa: $opt_source" ;;
+esac
+[[ -z "$json_arg" || "$opt_source" == "auto" ]] || die "укажите либо --json, либо --source, но не оба"
 
 opt_dns=$(parseDns "$opt_dns_arg") || exit 1
 if dnsPreset "$opt_dns_arg" > /dev/null; then
@@ -326,14 +454,20 @@ if [[ -n "$json_arg" ]]; then
         response_body=$(cat "$json_arg")
     fi
 else
-    info "Запрашиваю конфиг у $WARP_API_URL..."
-    result=$(requestConfWARP) || die "не удалось связаться с $WARP_API_URL"
-    http_code=${result##*$'\n'}
-    response_body=${result%$'\n'*}
-    if [[ "$http_code" != "200" ]]; then
-        info "Ответ: ${response_body:0:200}"
-        die "сервер вернул код $http_code"
-    fi
+    case "$opt_source" in
+        cloudflare)
+            fetchFromCloudflare || die "не удалось зарегистрироваться у Cloudflare (попробуйте --source santa)"
+            ;;
+        santa)
+            fetchFromSanta || die "не удалось получить конфиг у santa-atmo.ru"
+            ;;
+        auto)
+            if ! fetchFromCloudflare; then
+                info "Пробую через santa-atmo.ru (приватный ключ в этом случае создаёт их сервер)..."
+                fetchFromSanta || die "не удалось получить конфиг ни у Cloudflare, ни у santa-atmo.ru"
+            fi
+            ;;
+    esac
 fi
 
 [[ -n "$response_body" ]] || die "пустой ответ"
