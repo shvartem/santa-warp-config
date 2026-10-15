@@ -17,6 +17,9 @@ requestConfWARP1()
 TEMPLATE_URL="https://raw.githubusercontent.com/shvartem/santa-warp-config/main/template.conf"
 DNS_DEFAULT="1.1.1.1, 2606:4700:4700::1111, 1.0.0.1, 2606:4700:4700::1001"
 ENDPOINT_DEFAULT="162.159.192.1:500"
+MTU_DEFAULT="1280"
+ALLOWED_IPS_DEFAULT="0.0.0.0/0, ::/0"
+KEEPALIVE_DEFAULT="25"
 
 loadTemplate()
 {
@@ -50,6 +53,9 @@ confWarpBuilder()
     conf=${conf//"{{ADDRESS}}"/"$client_ipv4, $client_ipv6"}
     conf=${conf//"{{DNS}}"/"$DNS_DEFAULT"}
     conf=${conf//"{{ENDPOINT}}"/"$ENDPOINT_DEFAULT"}
+    conf=${conf//"{{MTU}}"/"$MTU_DEFAULT"}
+    conf=${conf//"{{ALLOWED_IPS}}"/"$ALLOWED_IPS_DEFAULT"}
+    conf=${conf//"{{KEEPALIVE}}"/"$KEEPALIVE_DEFAULT"}
     conf=${conf//"{{PEER_PUBLIC_KEY}}"/"$peer_pub"}
 
     # Защита от расхождения шаблона и скрипта: незаполненных полей быть не должно
