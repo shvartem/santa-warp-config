@@ -4,7 +4,77 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>WARP Config Builder</title>
+    <script>
+        // Применяем сохранённую тему до отрисовки, чтобы страница не «мигала»
+        try {
+            const t = localStorage.getItem('theme');
+            if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        } catch (e) { /* хранилище недоступно — тема как в системе */ }
+    </script>
     <style>
+        /* Цвета темы. По умолчанию — как в системе; кнопка в углу переключает вручную */
+        :root {
+            color-scheme: light;
+            --bg: #f5f5f5;
+            --surface: #ffffff;
+            --surface-muted: #f1f3f5;
+            --input-bg: #ffffff;
+            --text: #333333;
+            --heading: #2c3e50;
+            --muted: #666666;
+            --border: #dddddd;
+            --link: #007bff;
+            --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --error-text: #b02a37;
+            --error-bg: #f8d7da;
+            --success-text: #146c43;
+            --success-bg: #d4edda;
+            --info-text: #0c5460;
+            --info-bg: #d1ecf1;
+            --drop-bg: #e7f1ff;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                color-scheme: dark;
+                --bg: #16181c;
+                --surface: #1f2228;
+                --surface-muted: #2a2e35;
+                --input-bg: #16181c;
+                --text: #e4e6eb;
+                --heading: #f0f2f5;
+                --muted: #9aa0a6;
+                --border: #3a3f47;
+                --link: #6ea8fe;
+                --shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+                --error-text: #f1aeb5;
+                --error-bg: #2c0b0e;
+                --success-text: #75b798;
+                --success-bg: #051b11;
+                --info-text: #6edff6;
+                --info-bg: #032830;
+                --drop-bg: #0d2a4d;
+            }
+        }
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+            --bg: #16181c;
+            --surface: #1f2228;
+            --surface-muted: #2a2e35;
+            --input-bg: #16181c;
+            --text: #e4e6eb;
+            --heading: #f0f2f5;
+            --muted: #9aa0a6;
+            --border: #3a3f47;
+            --link: #6ea8fe;
+            --shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            --error-text: #f1aeb5;
+            --error-bg: #2c0b0e;
+            --success-text: #75b798;
+            --success-bg: #051b11;
+            --info-text: #6edff6;
+            --info-bg: #032830;
+            --drop-bg: #0d2a4d;
+        }
         * {
             box-sizing: border-box;
         }
@@ -13,19 +83,19 @@
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
+            background-color: var(--bg);
+            color: var(--text);
         }
         h1 {
             text-align: center;
             margin-bottom: 20px;
-            color: #2c3e50;
+            color: var(--heading);
             font-size: 1.8rem;
         }
         .container {
-            background: white;
+            background: var(--surface);
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow);
             padding: 20px;
         }
         .form-group {
@@ -41,16 +111,18 @@
             font-family: 'Consolas', monospace;
             font-size: 13px;
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             border-radius: 4px;
             resize: vertical;
+            background: var(--input-bg);
+            color: var(--text);
         }
         #jsonInput {
             height: 300px;
         }
         #output {
             height: 400px;
-            background-color: #f8f9fa;
+            background-color: var(--surface-muted);
         }
         button {
             background-color: #007bff;
@@ -89,10 +161,11 @@
         .endpoint-row input {
             font-size: 14px;
             padding: 8px 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             border-radius: 4px;
             min-height: 40px;
-            background: white;
+            background: var(--input-bg);
+            color: var(--text);
         }
         .endpoint-row input {
             font-family: 'Consolas', monospace;
@@ -109,7 +182,7 @@
             margin-top: 10px;
         }
         .advanced {
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             border-radius: 4px;
             padding: 0 15px;
         }
@@ -127,19 +200,21 @@
         .text-input {
             font-size: 14px;
             padding: 8px 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             border-radius: 4px;
             min-height: 40px;
             font-family: 'Consolas', monospace;
-            background: white;
+            background: var(--input-bg);
+            color: var(--text);
         }
         .advanced select {
             font-size: 14px;
             padding: 8px 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             border-radius: 4px;
             min-height: 40px;
-            background: white;
+            background: var(--input-bg);
+            color: var(--text);
             max-width: 100%;
         }
         #mtuInput,
@@ -153,7 +228,7 @@
         }
         .field-hint {
             font-size: 13px;
-            color: #666;
+            color: var(--muted);
             margin-top: 6px;
         }
         .qr-btn {
@@ -165,7 +240,7 @@
         .qr-box {
             margin-top: 10px;
             padding: 15px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             border-radius: 4px;
             text-align: center;
         }
@@ -178,31 +253,31 @@
         }
         .qr-hint {
             font-size: 13px;
-            color: #666;
+            color: var(--muted);
             margin: 10px auto 0;
             max-width: 560px;
         }
         .error {
-            color: #dc3545;
+            color: var(--error-text);
             margin-top: 10px;
             padding: 8px;
-            background-color: #f8d7da;
+            background-color: var(--error-bg);
             border-radius: 4px;
             font-size: 14px;
         }
         .success {
-            color: #28a745;
+            color: var(--success-text);
             margin-top: 10px;
             padding: 8px;
-            background-color: #d4edda;
+            background-color: var(--success-bg);
             border-radius: 4px;
             font-size: 14px;
         }
         .info {
-            color: #0c5460;
+            color: var(--info-text);
             margin-top: 10px;
             padding: 8px;
-            background-color: #d1ecf1;
+            background-color: var(--info-bg);
             border-radius: 4px;
             font-size: 14px;
         }
@@ -214,17 +289,19 @@
         }
         hr {
             margin: 20px 0;
+            border: none;
+            border-top: 1px solid var(--border);
         }
         .api-link {
             margin: 10px 0;
             padding: 10px;
-            background-color: #e9ecef;
+            background-color: var(--surface-muted);
             border-radius: 4px;
             text-align: center;
             word-break: break-word;
         }
         .api-link a {
-            color: #007bff;
+            color: var(--link);
             text-decoration: none;
             font-weight: bold;
         }
@@ -251,7 +328,71 @@
             accent-color: #007bff;
         }
 
+        .container {
+            position: relative;
+        }
+        .theme-toggle {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            margin: 0;
+            min-height: 36px;
+            padding: 6px 12px;
+            font-size: 13px;
+            background: var(--surface-muted);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .theme-toggle:hover {
+            background: var(--border);
+        }
+        .label-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .label-row label {
+            margin-bottom: 0;
+        }
+        .label-row .button-group {
+            margin: 0;
+        }
+        .small-btn {
+            min-height: 36px;
+            padding: 6px 14px;
+            font-size: 13px;
+            margin: 0;
+            background: var(--surface-muted);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .small-btn:hover {
+            background: var(--border);
+        }
+        #jsonInput.drag-over {
+            border: 2px dashed var(--link);
+            background: var(--drop-bg);
+        }
+
         @media (max-width: 768px) {
+            .theme-toggle {
+                position: static;
+                width: auto;
+                display: block;
+                margin: 0 0 10px auto;
+            }
+            .label-row .button-group {
+                flex-direction: row;
+                width: 100%;
+            }
+            .small-btn {
+                width: auto;
+                flex: 1;
+                font-size: 14px;
+            }
             body {
                 padding: 10px;
             }
@@ -298,6 +439,7 @@
 </head>
 <body>
     <div class="container">
+        <button type="button" id="themeToggle" class="theme-toggle" title="Тема оформления">🌓 Тема: авто</button>
         <h1>WARP Config Builder</h1>
         <p>Вставьте JSON, полученный от <code>https://santa-atmo.ru/warp/warp.php</code>, и нажмите «Собрать конфиг».</p>
         
@@ -414,8 +556,15 @@
         </div>
 
         <div class="form-group">
-            <label for="jsonInput">JSON ответ:</label>
-            <textarea id="jsonInput" placeholder='Вставьте JSON сюда...'></textarea>
+            <div class="label-row">
+                <label for="jsonInput">JSON ответ:</label>
+                <div class="button-group">
+                    <button type="button" id="pasteBtn" class="small-btn">📋 Вставить из буфера</button>
+                    <button type="button" id="fileBtn" class="small-btn">📂 Загрузить файл</button>
+                </div>
+            </div>
+            <input type="file" id="fileInput" accept=".json,.txt,application/json,text/plain" hidden>
+            <textarea id="jsonInput" placeholder='Вставьте JSON сюда или перетащите файл с ним...'></textarea>
         </div>
 
         <div class="button-group">
@@ -941,6 +1090,96 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        });
+
+        // ---------- Ввод JSON: буфер обмена, файл, перетаскивание ----------
+        const pasteBtn = document.getElementById('pasteBtn');
+        const fileBtn = document.getElementById('fileBtn');
+        const fileInput = document.getElementById('fileInput');
+        const MAX_JSON_FILE_SIZE = 1024 * 1024; // ответ API — пара килобайт; 1 МБ с запасом
+
+        function setJsonAndBuild(text) {
+            jsonInput.value = text.trim();
+            rebuild();
+        }
+
+        pasteBtn.addEventListener('click', async () => {
+            try {
+                if (!navigator.clipboard?.readText) throw new Error('unsupported');
+                const text = await navigator.clipboard.readText();
+                if (!text.trim()) {
+                    showMessage('Буфер обмена пуст — скопируйте JSON со страницы API', 'error');
+                    return;
+                }
+                setJsonAndBuild(text);
+            } catch (e) {
+                showMessage('Браузер не дал прочитать буфер обмена — вставьте JSON вручную (Ctrl+V или долгое нажатие)', 'info');
+                jsonInput.focus();
+            }
+        });
+
+        // Вставили JSON вручную в пустое поле — сразу собираем конфиг
+        jsonInput.addEventListener('paste', () => {
+            const wasEmpty = !jsonInput.value.trim();
+            setTimeout(() => {
+                if (wasEmpty && jsonInput.value.trim()) rebuild();
+            }, 0);
+        });
+
+        async function readJsonFile(file) {
+            if (!file) return;
+            if (file.size > MAX_JSON_FILE_SIZE) {
+                showMessage(`Файл «${file.name}» слишком большой — это точно ответ API?`, 'error');
+                return;
+            }
+            try {
+                setJsonAndBuild(await file.text());
+            } catch (e) {
+                showMessage(`Не удалось прочитать файл «${file.name}»`, 'error');
+            }
+        }
+
+        fileBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => {
+            readJsonFile(fileInput.files[0]);
+            fileInput.value = ''; // чтобы повторный выбор того же файла тоже срабатывал
+        });
+
+        jsonInput.addEventListener('dragover', (e) => {
+            if (!e.dataTransfer?.types?.includes('Files')) return; // перетаскивают текст — пусть браузер вставит
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            jsonInput.classList.add('drag-over');
+        });
+        jsonInput.addEventListener('dragleave', () => jsonInput.classList.remove('drag-over'));
+        jsonInput.addEventListener('drop', (e) => {
+            jsonInput.classList.remove('drag-over');
+            const file = e.dataTransfer?.files?.[0];
+            if (!file) return;
+            e.preventDefault();
+            readJsonFile(file);
+        });
+
+        // ---------- Тема оформления ----------
+        const themeToggle = document.getElementById('themeToggle');
+        const THEMES = ['auto', 'light', 'dark'];
+        const THEME_LABELS = { auto: '🌓 Тема: авто', light: '☀️ Тема: светлая', dark: '🌙 Тема: тёмная' };
+
+        function applyTheme(theme) {
+            if (theme === 'auto') delete document.documentElement.dataset.theme;
+            else document.documentElement.dataset.theme = theme;
+            themeToggle.textContent = THEME_LABELS[theme];
+        }
+        applyTheme(document.documentElement.dataset.theme || 'auto');
+
+        themeToggle.addEventListener('click', () => {
+            const current = document.documentElement.dataset.theme || 'auto';
+            const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
+            applyTheme(next);
+            try {
+                if (next === 'auto') localStorage.removeItem('theme');
+                else localStorage.setItem('theme', next);
+            } catch (e) { /* не сохранится — не страшно */ }
         });
 
         // Функции для вывода сообщений.
