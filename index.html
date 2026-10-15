@@ -79,6 +79,32 @@
         .save-btn:hover {
             background-color: #e66a0a;
         }
+        .qr-btn {
+            background-color: #6f42c1;
+        }
+        .qr-btn:hover {
+            background-color: #59359a;
+        }
+        .qr-box {
+            margin-top: 10px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .qr-box canvas {
+            width: 100%;
+            max-width: 560px;
+            height: auto;
+            image-rendering: pixelated;
+            background: #fff;
+        }
+        .qr-hint {
+            font-size: 13px;
+            color: #666;
+            margin: 10px auto 0;
+            max-width: 560px;
+        }
         .error {
             color: #dc3545;
             margin-top: 10px;
@@ -235,10 +261,25 @@
             <div class="button-group">
                 <button id="copyBtn" class="copy-btn">Копировать в буфер</button>
                 <button id="saveBtn" class="save-btn">Сохранить в файл</button>
+                <button id="qrBtn" class="qr-btn">Показать QR-код</button>
+            </div>
+            <div id="qrBox" class="qr-box" hidden>
+                <canvas id="qrCanvas" aria-label="QR-код конфигурации"></canvas>
+                <p class="qr-hint">
+                    Отсканируйте в приложении AmneziaWG («+» → «Сканировать QR-код»).
+                    Код очень плотный: если камера не распознаёт его, разверните страницу на весь экран
+                    или воспользуйтесь кнопкой «Сохранить в файл».
+                    QR-код создаётся прямо в браузере, конфиг никуда не отправляется.
+                </p>
+                <div class="button-group" style="justify-content: center;">
+                    <button id="qrSaveBtn" class="qr-btn">Сохранить QR как PNG</button>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- Генератор QR-кодов: https://github.com/kazuhikoarase/qrcode-generator (MIT) -->
+    <script src="vendor/qrcode-generator-1.4.4.js"></script>
     <script>
         // Словарь DNS-адресов для каждого провайдера
         const DNS_SETS = {
@@ -316,6 +357,10 @@
         const outputTextarea = document.getElementById('output');
         const copyBtn = document.getElementById('copyBtn');
         const saveBtn = document.getElementById('saveBtn');
+        const qrBtn = document.getElementById('qrBtn');
+        const qrBox = document.getElementById('qrBox');
+        const qrCanvas = document.getElementById('qrCanvas');
+        const qrSaveBtn = document.getElementById('qrSaveBtn');
         const messageDiv = document.getElementById('message');
         const radioButtons = document.querySelectorAll('input[name="dnsProvider"]');
 
@@ -346,11 +391,22 @@
                 outputTextarea.value = config;
                 builtDnsProvider = dnsProvider;
                 outputGroup.style.display = 'block';
+                if (!qrBox.hidden) {
+                    // Ошибка QR не должна мешать самому конфигу
+                    try {
+                        renderQr();
+                    } catch (qrErr) {
+                        hideQr();
+                        showMessage(`Конфигурация создана (DNS: ${dnsProvider}), но ${qrErr.message}`, 'info');
+                        return;
+                    }
+                }
                 showMessage(`Конфигурация успешно создана (DNS: ${dnsProvider})`, 'success');
             } catch (err) {
                 outputTextarea.value = '';
                 builtDnsProvider = null;
                 outputGroup.style.display = 'none';
+                hideQr();
                 showMessage(err.message, 'error');
             }
         }
@@ -371,6 +427,7 @@
             outputTextarea.value = '';
             builtDnsProvider = null;
             outputGroup.style.display = 'none';
+            hideQr();
             clearMessage();
             // Сбросить радиокнопку на Cloudflare (по умолчанию)
             document.querySelector('input[value="cloudflare"]').checked = true;
@@ -411,6 +468,79 @@
             URL.revokeObjectURL(url);
 
             showMessage(`Файл ${filename} сохранён`, 'success');
+        });
+
+        // QR-код. Конфиг с блоком I1 весит ~2,9 КБ — это у самого предела QR-кода
+        // (2953 байта в версии 40 с минимальной коррекцией ошибок). Поэтому используем уровень L
+        // и кодируем компактную версию конфига: без пробелов вокруг «=» и после запятых.
+        // Парсеры WireGuard/AmneziaWG понимают её так же, а экономия — около 45 байт.
+        function compactConfig(conf) {
+            return conf
+                .split('\n')
+                .map(line => line.replace(/^(\w+)\s*=\s*/, '$1=').replace(/,\s+/g, ','))
+                .join('\n');
+        }
+
+        function renderQr() {
+            if (typeof qrcode !== 'function') {
+                throw new Error('Не удалось загрузить генератор QR-кодов (vendor/qrcode-generator-1.4.4.js)');
+            }
+            const qr = qrcode(0, 'L'); // 0 — версия подбирается автоматически
+            qr.addData(compactConfig(outputTextarea.value), 'Byte');
+            try {
+                qr.make();
+            } catch (e) {
+                throw new Error('конфиг слишком длинный для QR-кода — используйте «Сохранить в файл»');
+            }
+
+            const count = qr.getModuleCount();
+            const quiet = 4;              // обязательное белое поле вокруг кода, в модулях
+            const scale = 4;              // пикселей на модуль в PNG
+            const size = (count + quiet * 2) * scale;
+            qrCanvas.width = size;
+            qrCanvas.height = size;
+            const ctx = qrCanvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#000';
+            for (let row = 0; row < count; row++) {
+                for (let col = 0; col < count; col++) {
+                    if (qr.isDark(row, col)) {
+                        ctx.fillRect((col + quiet) * scale, (row + quiet) * scale, scale, scale);
+                    }
+                }
+            }
+        }
+
+        function hideQr() {
+            qrBox.hidden = true;
+            qrBtn.textContent = 'Показать QR-код';
+        }
+
+        qrBtn.addEventListener('click', () => {
+            if (!qrBox.hidden) {
+                hideQr();
+                return;
+            }
+            if (!outputTextarea.value) return;
+            try {
+                renderQr();
+                qrBox.hidden = false;
+                qrBtn.textContent = 'Скрыть QR-код';
+                qrBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (err) {
+                showMessage(err.message.charAt(0).toUpperCase() + err.message.slice(1), 'error');
+            }
+        });
+
+        qrSaveBtn.addEventListener('click', () => {
+            if (qrBox.hidden || !builtDnsProvider) return;
+            const link = document.createElement('a');
+            link.href = qrCanvas.toDataURL('image/png');
+            link.download = `warp_santa_${builtDnsProvider}_qr.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         });
 
         // Функции для вывода сообщений.
