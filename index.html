@@ -79,6 +79,35 @@
         .save-btn:hover {
             background-color: #e66a0a;
         }
+        .endpoint-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .endpoint-row select,
+        .endpoint-row input {
+            font-size: 14px;
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 40px;
+            background: white;
+        }
+        .endpoint-row input {
+            font-family: 'Consolas', monospace;
+        }
+        #endpointHostCustom {
+            width: 260px;
+        }
+        #endpointPortCustom {
+            width: 110px;
+        }
+        .field-hint {
+            font-size: 13px;
+            color: #666;
+            margin-top: 6px;
+        }
         .qr-btn {
             background-color: #6f42c1;
         }
@@ -207,6 +236,15 @@
                 flex-direction: column;
                 gap: 10px;
             }
+            .endpoint-row select,
+            .endpoint-row input,
+            #endpointHostCustom,
+            #endpointPortCustom {
+                width: 100%;
+            }
+            .endpoint-colon {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -238,6 +276,30 @@
                 <label>
                     <input type="radio" name="dnsProvider" value="malw"> MALW (84.21.189.133)
                 </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="endpointHost">Endpoint (сервер WARP):</label>
+            <div class="endpoint-row">
+                <select id="endpointHost" aria-label="Адрес сервера">
+                    <option value="162.159.192.1" selected>162.159.192.1</option>
+                    <option value="engage.cloudflareclient.com">engage.cloudflareclient.com</option>
+                    <option value="custom">Свой адрес…</option>
+                </select>
+                <input id="endpointHostCustom" type="text" placeholder="IP или домен" aria-label="Свой адрес сервера" hidden>
+                <span class="endpoint-colon">:</span>
+                <select id="endpointPort" aria-label="Порт">
+                    <option value="500" selected>500</option>
+                    <option value="2408">2408</option>
+                    <option value="1701">1701</option>
+                    <option value="4500">4500</option>
+                    <option value="custom">Свой порт…</option>
+                </select>
+                <input id="endpointPortCustom" type="number" min="1" max="65535" placeholder="Порт" aria-label="Свой порт" hidden>
+            </div>
+            <div class="field-hint">
+                Если соединение не устанавливается, попробуйте другой порт: у WARP основной порт 2408, запасные — 500, 1701, 4500.
             </div>
         </div>
 
@@ -313,7 +375,7 @@
         }
 
         // Функция-конструктор конфигурации
-        function buildWarpConfig(template, jsonString, dnsProvider) {
+        function buildWarpConfig(template, jsonString, dnsProvider, endpoint) {
             let data;
             try {
                 data = JSON.parse(jsonString);
@@ -340,11 +402,18 @@
                 PRIVATE_KEY: priv,
                 ADDRESS: `${clientIpv4}, ${clientIpv6}`,
                 DNS: dnsString,
-                PEER_PUBLIC_KEY: peerPub
+                PEER_PUBLIC_KEY: peerPub,
+                ENDPOINT: endpoint
             };
             const conf = template.replace(/\{\{(\w+)\}\}/g, (match, name) =>
                 name in values ? values[name] : match
             ).trimEnd();
+
+            // Защита от расхождения шаблона и кода: незаполненных полей быть не должно
+            const leftover = conf.match(/\{\{\w+\}\}/);
+            if (leftover) {
+                throw new Error(`В шаблоне есть незаполненное поле ${leftover[0]} — обновите страницу (Ctrl+F5)`);
+            }
 
             return conf;
         }
@@ -363,6 +432,39 @@
         const qrSaveBtn = document.getElementById('qrSaveBtn');
         const messageDiv = document.getElementById('message');
         const radioButtons = document.querySelectorAll('input[name="dnsProvider"]');
+        const endpointHost = document.getElementById('endpointHost');
+        const endpointHostCustom = document.getElementById('endpointHostCustom');
+        const endpointPort = document.getElementById('endpointPort');
+        const endpointPortCustom = document.getElementById('endpointPortCustom');
+
+        const DEFAULT_ENDPOINT_HOST = '162.159.192.1';
+        const DEFAULT_ENDPOINT_PORT = '500';
+
+        // Endpoint в формате host:port; IPv6-адрес оборачивается в квадратные скобки
+        function getEndpoint() {
+            let host = endpointHost.value;
+            if (host === 'custom') {
+                host = endpointHostCustom.value.trim().replace(/^\[(.*)\]$/, '$1');
+                if (!host) throw new Error('Укажите свой адрес сервера или выберите адрес из списка');
+                const isIpv6 = host.includes(':');
+                const valid = isIpv6
+                    ? /^[0-9a-fA-F:.]+$/.test(host)
+                    : /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/.test(host);
+                if (!valid) throw new Error(`Некорректный адрес сервера: ${host}`);
+                if (isIpv6) host = `[${host}]`;
+            }
+
+            let port = endpointPort.value;
+            if (port === 'custom') {
+                port = endpointPortCustom.value.trim();
+                const n = Number(port);
+                if (!/^\d+$/.test(port) || n < 1 || n > 65535) {
+                    throw new Error('Порт должен быть числом от 1 до 65535');
+                }
+                port = String(n);
+            }
+            return `${host}:${port}`;
+        }
 
         // Получить выбранный DNS провайдер
         function getSelectedDnsProvider() {
@@ -387,7 +489,7 @@
 
             try {
                 const template = await loadTemplate();
-                const config = buildWarpConfig(template, jsonText, dnsProvider);
+                const config = buildWarpConfig(template, jsonText, dnsProvider, getEndpoint());
                 outputTextarea.value = config;
                 builtDnsProvider = dnsProvider;
                 outputGroup.style.display = 'block';
@@ -421,6 +523,28 @@
             });
         }
 
+        // Поля для своего адреса/порта показываются только при выборе «Свой…»
+        function syncEndpointInputs() {
+            endpointHostCustom.hidden = endpointHost.value !== 'custom';
+            endpointPortCustom.hidden = endpointPort.value !== 'custom';
+        }
+        for (const select of [endpointHost, endpointPort]) {
+            select.addEventListener('change', () => {
+                syncEndpointInputs();
+                const custom = select === endpointHost ? endpointHostCustom : endpointPortCustom;
+                if (select.value === 'custom') {
+                    custom.focus();
+                    if (!custom.value.trim()) return; // ждём ввода
+                }
+                if (outputTextarea.value) rebuild({ quiet: true });
+            });
+        }
+        for (const input of [endpointHostCustom, endpointPortCustom]) {
+            input.addEventListener('change', () => {
+                if (outputTextarea.value) rebuild({ quiet: true });
+            });
+        }
+
         // Очистка всех полей
         clearBtn.addEventListener('click', () => {
             jsonInput.value = '';
@@ -431,6 +555,12 @@
             clearMessage();
             // Сбросить радиокнопку на Cloudflare (по умолчанию)
             document.querySelector('input[value="cloudflare"]').checked = true;
+            // и endpoint — на значения по умолчанию
+            endpointHost.value = DEFAULT_ENDPOINT_HOST;
+            endpointPort.value = DEFAULT_ENDPOINT_PORT;
+            endpointHostCustom.value = '';
+            endpointPortCustom.value = '';
+            syncEndpointInputs();
         });
 
         // Копирование в буфер

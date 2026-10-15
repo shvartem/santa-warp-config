@@ -16,6 +16,7 @@ requestConfWARP1()
 # загружаем из репозитория.
 TEMPLATE_URL="https://raw.githubusercontent.com/shvartem/santa-warp-config/main/template.conf"
 DNS_DEFAULT="1.1.1.1, 2606:4700:4700::1111, 1.0.0.1, 2606:4700:4700::1001"
+ENDPOINT_DEFAULT="162.159.192.1:500"
 
 loadTemplate()
 {
@@ -48,7 +49,14 @@ confWarpBuilder()
     conf=${conf//"{{PRIVATE_KEY}}"/"$priv"}
     conf=${conf//"{{ADDRESS}}"/"$client_ipv4, $client_ipv6"}
     conf=${conf//"{{DNS}}"/"$DNS_DEFAULT"}
+    conf=${conf//"{{ENDPOINT}}"/"$ENDPOINT_DEFAULT"}
     conf=${conf//"{{PEER_PUBLIC_KEY}}"/"$peer_pub"}
+
+    # Защита от расхождения шаблона и скрипта: незаполненных полей быть не должно
+    if [[ "$conf" =~ \{\{[A-Z_]+\}\} ]]; then
+        echo "Ошибка: в шаблоне есть незаполненное поле ${BASH_REMATCH[0]} — скачайте свежую версию скрипта" >&2
+        return 1
+    fi
     echo "$conf"
 }
 
