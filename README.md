@@ -54,11 +54,30 @@ python3 -m http.server 8000
 и откройте <http://localhost:8000>.
 
 ### Скрипт для терминала
-`generate_warp_santa.sh` сам запрашивает JSON у API и сохраняет готовый конфиг (DNS — Cloudflare). Нужны `curl` и `jq`.
+`generate_warp_santa.sh` сам запрашивает JSON у API и сохраняет готовый конфиг. Умеет всё то же, что страница: формат, DNS, endpoint, AllowedIPs, MTU, keepalive. Нужны `curl` и `jq`; работает и со старым bash 3.2 (macOS).
 
 ```bash
-bash generate_warp_santa.sh
+bash generate_warp_santa.sh                       # спросит имя файла (Enter — warp_santa_cloudflare.conf)
+bash generate_warp_santa.sh --dns google --port 2408 -o home.conf
+bash generate_warp_santa.sh -f wg -a nolan -o router.conf
+bash generate_warp_santa.sh --json response.json -o - > warp.conf
+bash generate_warp_santa.sh --help                # все параметры
 ```
+
+| Параметр | Значения | По умолчанию |
+|---|---|---|
+| `-f`, `--format` | `awg` — AmneziaWG, `wg` — обычный WireGuard | `awg` |
+| `-d`, `--dns` | `cloudflare`, `google`, `comss`, `malw` или свои адреса через запятую | `cloudflare` |
+| `-e`, `--endpoint` | `HOST:PORT`, IPv6 — `[адрес]:PORT` | `162.159.192.1:500` |
+| `-p`, `--port` | только порт: `500`, `2408`, `1701`, `4500` или свой | `500` |
+| `-a`, `--allowed-ips` | `all`, `nolan` (кроме локальных сетей), `ipv4` или свой список подсетей | `all` |
+| `--mtu` | 1280–1500 | `1280` |
+| `--keepalive` | 0–65535 секунд, `0` — выключить | `25` |
+| `-o`, `--out` | имя файла или `-` (вывести в консоль) | `warp_santa_<dns>.conf` |
+| `-j`, `--json` | готовый ответ API из файла или `-` (stdin) вместо запроса | — |
+| `--force` | перезаписать существующий файл без вопроса | — |
+
+Существующий файл скрипт без `--force` не перезапишет: в терминале спросит, в скриптах и по расписанию — завершится с ошибкой. Файл создаётся с правами `600`, потому что в нём приватный ключ.
 
 ## Структура
 
