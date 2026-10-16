@@ -89,7 +89,7 @@ bash generate_warp_santa.sh --help                # все параметры
 - `index.html` — веб-страница
 - `generate_warp_santa.sh` — скрипт для терминала
 - `vendor/qrcode-generator-1.4.4.js` — генератор QR-кодов ([kazuhikoarase/qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator), MIT), лежит в репозитории, чтобы страница не зависела от CDN
-- `worker/` — прокси регистрации на Cloudflare Workers для кнопки автоматического получения конфига; инструкция по развёртыванию — в [worker/README.md](worker/README.md)
+- `worker/` и `wrangler.toml` — прокси регистрации на Cloudflare Workers для кнопки автоматического получения конфига; инструкция по развёртыванию — в [worker/README.md](worker/README.md)
 - `template.conf` — общий шаблон конфига для страницы и скрипта. Параметры AmneziaWG, endpoint и т.п. меняются только здесь.
 
 ---

@@ -1,7 +1,12 @@
-# Имя должно совпадать с именем Worker в панели Cloudflare —
-# иначе автоматическая сборка из GitHub (Settings → Builds) упадёт
+# Конфиг Cloudflare Worker из папки worker/.
+# Лежит в корне репозитория, потому что автоматическая сборка Cloudflare
+# (Settings → Builds) по умолчанию запускает `wrangler deploy` из корня.
+# Без этого файла Cloudflare принимает репозиторий за статический сайт
+# и выкладывает index.html вместо Worker.
+#
+# Имя должно совпадать с именем Worker в панели Cloudflare.
 name = "damp-bush-c893"
-main = "worker.js"
+main = "worker/worker.js"
 compatibility_date = "2025-09-01"
 
 [vars]
