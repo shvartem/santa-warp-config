@@ -20,22 +20,25 @@ API регистрации Cloudflare не принимает запросы и�
 
 Сейчас Worker развёрнут по адресу **https://damp-bush-c893.shvartem.workers.dev**, и этот адрес прописан в `index.html` (`REGISTER_API_URL`). Если открыть адрес в браузере, Worker ответит, что работает. Сама регистрация идёт через `POST /reg`.
 
-Имя Worker в панели Cloudflare должно совпадать с `name` в `wrangler.toml`.
+Настройки Worker лежат в `wrangler.toml` **в корне репозитория** (`main = "worker/worker.js"`). Имя Worker в панели Cloudflare должно совпадать с `name` в этом файле.
 
 ### Вариант 1: автоматически из GitHub (рекомендуется)
 
 1. Откройте Workers & Pages → `damp-bush-c893` → **Settings → Builds → Connect**.
 2. Выберите репозиторий `shvartem/santa-warp-config` и ветку `main`.
-3. Укажите **Root directory: `worker`**.
+3. **Root directory** оставьте пустым (корень репозитория). Build command и Deploy command тоже оставьте по умолчанию.
 
 Cloudflare развернёт Worker по `wrangler.toml`, включая лимиты частоты запросов. Дальше каждый мерж в `main` обновляет Worker сам.
+
+Проверить, что развернулся именно Worker, можно так: откройте его адрес в браузере. Должен появиться текст «Worker регистрации WARP работает». Если вместо этого открылась страница WARP Config Builder, Cloudflare не нашёл `wrangler.toml` и выложил сайт как статику. В этом случае проверьте, что Root directory пустой.
 
 ### Вариант 2: из терминала
 
 Понадобится Node.js (LTS).
 
+Команды выполняются из корня репозитория:
+
 ```bash
-cd worker
 npx wrangler@latest login    # откроется браузер — войдите в аккаунт Cloudflare
 npx wrangler@latest deploy
 ```
@@ -51,7 +54,7 @@ npx wrangler@latest deploy
 
 ### Новый Worker с другим адресом
 
-Если вы создаёте новый Worker, поменяйте `name` в `wrangler.toml` и `REGISTER_API_URL` в `index.html`. Если `REGISTER_API_URL` пустой, кнопка на странице скрыта, и остаётся только ручной способ через santa-atmo.ru.
+Если вы создаёте новый Worker, поменяйте `name` в `wrangler.toml` (в корне репозитория) и `REGISTER_API_URL` в `index.html`. Если `REGISTER_API_URL` пустой, кнопка на странице скрыта, и остаётся только ручной способ через santa-atmo.ru.
 
 ### Проверка
 
@@ -65,7 +68,7 @@ curl -X POST https://damp-bush-c893.shvartem.workers.dev/reg \
 
 ## Настройки
 
-В `wrangler.toml`:
+В `wrangler.toml` в корне репозитория:
 
 - `ALLOWED_ORIGINS` — сайты, которым разрешено обращаться к Worker, через запятую. Для локальной проверки страницы добавьте, например, `http://localhost:8000`.
 - `[[ratelimits]]` — лимиты частоты запросов (нужен wrangler 4.36+). Если удалить эти блоки, Worker будет работать без ограничений.
