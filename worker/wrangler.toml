@@ -1,4 +1,6 @@
-name = "warp-config-reg"
+# Имя должно совпадать с именем Worker в панели Cloudflare —
+# иначе автоматическая сборка из GitHub (Settings → Builds) упадёт
+name = "damp-bush-c893"
 main = "worker.js"
 compatibility_date = "2025-09-01"
 

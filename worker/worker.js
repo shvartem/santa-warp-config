@@ -41,6 +41,14 @@ export default {
             : { 'Vary': 'Origin' };
 
         const url = new URL(request.url);
+        // Открыли адрес Worker в браузере — подскажем, что всё в порядке
+        if (url.pathname === '/' && (request.method === 'GET' || request.method === 'HEAD')) {
+            return new Response(
+                'Worker регистрации WARP работает.\n' +
+                'Он принимает только POST-запросы на /reg от страницы https://shvartem.github.io/santa-warp-config/\n',
+                { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } }
+            );
+        }
         if (url.pathname !== '/reg') {
             return json({ error: 'Не найдено' }, 404, cors);
         }

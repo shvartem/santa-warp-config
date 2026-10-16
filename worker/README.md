@@ -18,7 +18,21 @@ API регистрации Cloudflare не принимает запросы и�
 
 ## Развёртывание
 
-Понадобятся бесплатный аккаунт Cloudflare и Node.js (LTS).
+Сейчас Worker развёрнут по адресу **https://damp-bush-c893.shvartem.workers.dev**, и этот адрес прописан в `index.html` (`REGISTER_API_URL`). Если открыть адрес в браузере, Worker ответит, что работает. Сама регистрация идёт через `POST /reg`.
+
+Имя Worker в панели Cloudflare должно совпадать с `name` в `wrangler.toml`.
+
+### Вариант 1: автоматически из GitHub (рекомендуется)
+
+1. Откройте Workers & Pages → `damp-bush-c893` → **Settings → Builds → Connect**.
+2. Выберите репозиторий `shvartem/santa-warp-config` и ветку `main`.
+3. Укажите **Root directory: `worker`**.
+
+Cloudflare развернёт Worker по `wrangler.toml`, включая лимиты частоты запросов. Дальше каждый мерж в `main` обновляет Worker сам.
+
+### Вариант 2: из терминала
+
+Понадобится Node.js (LTS).
 
 ```bash
 cd worker
@@ -26,18 +40,23 @@ npx wrangler@latest login    # откроется браузер — войди�
 npx wrangler@latest deploy
 ```
 
-После `deploy` wrangler покажет адрес вида `https://warp-config-reg.<ваш-поддомен>.workers.dev`. Пропишите его в `index.html`:
+### Вариант 3: вручную в панели
 
-```js
-const REGISTER_API_URL = 'https://warp-config-reg.<ваш-поддомен>.workers.dev/reg';
-```
+Откройте Worker → **Edit code**, замените код содержимым `worker.js` и нажмите **Deploy**.
 
-После этого на странице появится кнопка автоматического получения конфига. Ссылка на santa-atmo.ru останется на месте как запасной способ.
+Учтите два ограничения этого варианта:
+
+- лимитов частоты запросов не будет, они задаются только через `wrangler.toml`;
+- после каждого изменения `worker.js` код придётся обновлять вручную.
+
+### Новый Worker с другим адресом
+
+Если вы создаёте новый Worker, поменяйте `name` в `wrangler.toml` и `REGISTER_API_URL` в `index.html`. Если `REGISTER_API_URL` пустой, кнопка на странице скрыта, и остаётся только ручной способ через santa-atmo.ru.
 
 ### Проверка
 
 ```bash
-curl -X POST https://warp-config-reg.<ваш-поддомен>.workers.dev/reg \
+curl -X POST https://damp-bush-c893.shvartem.workers.dev/reg \
   -H 'Origin: https://shvartem.github.io' \
   -d "{\"key\":\"$(head -c32 /dev/urandom | base64)\"}"
 ```
